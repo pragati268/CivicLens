@@ -1,12 +1,52 @@
-html {
-  min-width: 320px;
-  min-height: 100%;
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
-body {
-  margin: 0;
+.report-form {
+  display: grid;
+  gap: 15px;
+  margin-top: 22px;
 }
 
-#root {
-  min-height: 100vh;
+.report-form label {
+  display: grid;
+  gap: 7px;
+  color: #465365;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.report-form input,
+.report-form select {
+  width: 100%;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #dfe5ec;
+  border-radius: 8px;
+  background: white;
+  color: #354257;
+  font: inherit;
+  font-size: 12px;
+}
+
+.report-form button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.error-message {
+  color: #c33d3d !important;
+  background: #fff0ed;
+  padding: 10px;
+  border-radius: 7px;
+}
+
+.success-message {
+  color: #206653 !important;
+  background: #eaf5f1;
+  padding: 10px;
+  border-radius: 7px;
 }

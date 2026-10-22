@@ -1,8 +1,74 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
+import { getReports, createReport } from "./api";
 
 function App() {
-  const [count, setCount] = useState(0);
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function loadReports() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await getReports();
+      setReports(data);
+    } catch (err) {
+      setError(err.message || "Unable to connect to CivicLens API.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    async function fetchReports() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getReports();
+        setReports(data);
+      } catch (err) {
+        setError(err.message || "Unable to connect to CivicLens API.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchReports();
+  }, []);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const report = {
+      issue: formData.get("issue"),
+      location: formData.get("location"),
+      priority: formData.get("priority"),
+    };
+
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const createdReport = await createReport(report);
+
+      setReports((current) => [createdReport, ...current]);
+      setMessage(`Report ${createdReport.id} submitted successfully.`);
+      form.reset();
+    } catch (err) {
+      setError(err.message || "Unable to submit report.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="app">
@@ -12,95 +78,151 @@ function App() {
         <p className="tagline">SMART CIVIC SAFETY</p>
 
         <nav>
-          <a className="active" href="#overview">⌂ Overview</a>
-          <a href="#detection">◎ Live Detection</a>
-          <a href="#map">⌖ Hazard Map</a>
-          <a href="#reports">▤ My Reports</a>
+          <a className="active" href="#overview">
+            ⌂ Overview
+          </a>
+          <a href="#reports">▤ Civic Reports</a>
+          <a href="#new-report">+ Report Issue</a>
         </nav>
 
         <div className="system-status">
-          <span className="dot"></span>
-          Demo environment
+          <span className="dot" />
+          Backend connected
         </div>
       </aside>
 
       <main className="main">
         <header className="topbar">
-          <span>Dashboard / Overview</span>
-          <div className="user">U <span>Demo User</span></div>
+          <span>CivicLens / Dashboard</span>
+          <div className="user">
+            U <span>Demo User</span>
+          </div>
         </header>
 
-        <section className="welcome">
+        <section className="welcome" id="overview">
           <div>
             <p className="eyebrow">CIVIC SAFETY DASHBOARD</p>
             <h1>Your city, made safer.</h1>
-            <p>Detect road hazards. Report issues. Make streets safer.</p>
+            <p>Report road hazards and help build safer streets.</p>
           </div>
-          <button onClick={() => alert("We will build the report form next!")}>
+          <button
+            onClick={() =>
+              document.getElementById("new-report")?.scrollIntoView({
+                behavior: "smooth",
+              })
+            }
+          >
             + Report an issue
           </button>
         </section>
 
         <section className="stats">
           <article className="card">
-            <span>Reported hazards</span>
-            <h2>128</h2>
-            <small>Sample demo data</small>
+            <span>Total reports</span>
+            <h2>{reports.length}</h2>
+            <small>From the backend API</small>
           </article>
           <article className="card">
-            <span>High-priority</span>
-            <h2>18</h2>
-            <small>Need attention</small>
+            <span>High priority</span>
+            <h2>{reports.filter((r) => r.priority === "High").length}</h2>
+            <small>Needs attention</small>
           </article>
           <article className="card">
-            <span>Issues resolved</span>
-            <h2>76</h2>
-            <small>Sample demo data</small>
+            <span>In progress</span>
+            <h2>{reports.filter((r) => r.status === "In progress").length}</h2>
+            <small>Being addressed</small>
           </article>
           <article className="card">
-            <span>Active reports</span>
-            <h2>52</h2>
-            <small>Awaiting action</small>
+            <span>Resolved</span>
+            <h2>{reports.filter((r) => r.status === "Resolved").length}</h2>
+            <small>Marked resolved</small>
           </article>
         </section>
 
         <section className="content">
-          <article className="panel">
-            <h3>Recent civic reports</h3>
-            <p>Example road hazards reported by citizens</p>
-            <div className="report">
-              <div><strong>Large pothole</strong><small>CL-1028</small></div>
-              <span>Majitha Road</span>
-              <b className="high">High</b>
+          <article className="panel" id="reports">
+            <div className="panel-heading">
+              <div>
+                <h3>Road hazard reports</h3>
+                <p>Reports retrieved from FastAPI</p>
+              </div>
+              <button className="secondary" type="button" onClick={loadReports}>
+                Refresh
+              </button>
             </div>
-            <div className="report">
-              <div><strong>Damaged road surface</strong><small>CL-1027</small></div>
-              <span>Lawrence Road</span>
-              <b className="medium">Medium</b>
-            </div>
-            <div className="report">
-              <div><strong>Open manhole</strong><small>CL-1026</small></div>
-              <span>Ranjit Avenue</span>
-              <b className="high">High</b>
-            </div>
+
+            {loading && <p>Loading reports...</p>}
+            {error && <p className="error-message">{error}</p>}
+            {message && <p className="success-message">{message}</p>}
+
+            {!loading && !error && reports.length === 0 && (
+              <p>No reports found. Submit the first report below.</p>
+            )}
+
+            {!loading &&
+              reports.map((report) => (
+                <div className="report" key={report.id}>
+                  <div>
+                    <strong>{report.issue}</strong>
+                    <small>
+                      {report.id} · {report.status}
+                    </small>
+                  </div>
+                  <span>{report.location}</span>
+                  <b className={report.priority.toLowerCase()}>
+                    {report.priority}
+                  </b>
+                </div>
+              ))}
           </article>
 
-          <article className="panel safety">
-            <h3>Road safety detection</h3>
-            <div className="road">
-              <div className="road-markings"></div>
-              <div className="pothole"></div>
-              <div className="detection">HAZARD</div>
-            </div>
-            <h4>See the hazard before you reach it.</h4>
-            <p>This is a visual demo. AI camera detection comes next.</p>
-            <button className="secondary" onClick={() => setCount(count + 1)}>
-              Test interaction ({count})
-            </button>
+          <article className="panel" id="new-report">
+            <h3>Report a road issue</h3>
+            <p>Submit your report to the CivicLens backend.</p>
+
+            <form className="report-form" onSubmit={handleSubmit}>
+              <label>
+                Issue type
+                <select name="issue" required defaultValue="">
+                  <option value="" disabled>
+                    Select an issue
+                  </option>
+                  <option>Large pothole</option>
+                  <option>Damaged road surface</option>
+                  <option>Open manhole</option>
+                  <option>Road cracks</option>
+                  <option>Waterlogging</option>
+                </select>
+              </label>
+
+              <label>
+                Location
+                <input
+                  name="location"
+                  placeholder="Enter a road or landmark"
+                  minLength={2}
+                  maxLength={200}
+                  required
+                />
+              </label>
+
+              <label>
+                Priority
+                <select name="priority" defaultValue="Medium">
+                  <option>Low</option>
+                  <option>Medium</option>
+                  <option>High</option>
+                </select>
+              </label>
+
+              <button type="submit" disabled={submitting}>
+                {submitting ? "Submitting..." : "Submit report"}
+              </button>
+            </form>
           </article>
         </section>
 
-        <footer>CivicLens © 2026 · Prototype using demo data</footer>
+        <footer>CivicLens © 2026 · Full-stack development prototype</footer>
       </main>
     </div>
   );

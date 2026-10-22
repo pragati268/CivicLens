@@ -1,27 +1,41 @@
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy import create_engine, String, DateTime, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-app = FastAPI(
-    title="CivicLens API",
-    description="Road hazard detection and civic issue reporting",
-    version="0.1.0",
+
+DATABASE_URL = "sqlite:///./civiclens.db"
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False},
 )
 
-# Allow the local React development server to access the API.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    report_code: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    issue: Mapped[str] = mapped_column(String(100))
+    location: Mapped[str] = mapped_column(String(200))
+    priority: Mapped[str] = mapped_column(String(10), default="Medium")
+    status: Mapped[str] = mapped_column(String(30), default="Reported")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
 
 
 class ReportCreate(BaseModel):
@@ -30,16 +44,66 @@ class ReportCreate(BaseModel):
     priority: Literal["Low", "Medium", "High"] = "Medium"
 
 
-demo_reports = [
-    {
-        "id": "CL-1001",
-        "issue": "Large pothole",
-        "location": "Majitha Road",
-        "priority": "High",
-        "status": "Reported",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+def get_db():
+    with SessionLocal() as db:
+        yield db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+
+    # Insert a sample report only when the database is empty.
+    with SessionLocal() as db:
+        first_report = db.scalar(select(Report).limit(1))
+
+        if first_report is None:
+            db.add(
+                Report(
+                    report_code="CL-1001",
+                    issue="Large pothole",
+                    location="Majitha Road",
+                    priority="High",
+                    status="Reported",
+                )
+            )
+            db.commit()
+
+    yield
+
+
+app = FastAPI(
+    title="CivicLens API",
+    description="Road hazard detection and civic issue reporting",
+    version="0.2.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def report_to_dict(report: Report):
+    return {
+        "id": report.report_code,
+        "issue": report.issue,
+        "location": report.location,
+        "priority": report.priority,
+        "status": report.status,
+        "created_at": (
+            report.created_at.isoformat()
+            if report.created_at
+            else None
+        ),
     }
-]
 
 
 @app.get("/")
@@ -56,18 +120,35 @@ def health():
 
 
 @app.get("/api/reports")
-def get_reports():
-    return {"count": len(demo_reports), "reports": demo_reports}
+def get_reports(db: Session = Depends(get_db)):
+    reports = db.scalars(
+        select(Report).order_by(Report.id.desc())
+    ).all()
+
+    return {
+        "count": len(reports),
+        "reports": [report_to_dict(report) for report in reports],
+    }
 
 
 @app.post("/api/reports", status_code=201)
-def create_report(report: ReportCreate):
-    new_report = {
-        "id": f"CL-{1001 + len(demo_reports)}",
-        **report.model_dump(),
-        "status": "Reported",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+def create_report(
+    report: ReportCreate,
+    db: Session = Depends(get_db),
+):
+    new_report = Report(
+        report_code="TEMP",
+        issue=report.issue,
+        location=report.location,
+        priority=report.priority,
+        status="Reported",
+    )
 
-    demo_reports.append(new_report)
-    return new_report
+    db.add(new_report)
+    db.flush()
+
+    new_report.report_code = f"CL-{1000 + new_report.id}"
+    db.commit()
+    db.refresh(new_report)
+
+    return report_to_dict(new_report)
