@@ -4,7 +4,7 @@ export async function getReports() {
   const response = await fetch(`${API_BASE}/api/reports`);
 
   if (!response.ok) {
-    throw new Error(`Loading reports failed: ${response.status}`);
+    throw new Error(`Failed to load reports (${response.status})`);
   }
 
   const data = await response.json();
@@ -14,15 +14,12 @@ export async function getReports() {
 export async function createReport(report) {
   const response = await fetch(`${API_BASE}/api/reports`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(report),
   });
 
   if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Submission failed (${response.status}): ${details}`);
+    throw new Error(await response.text());
   }
 
   return response.json();

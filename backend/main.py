@@ -7,7 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, String, DateTime, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
-
+from sqlalchemy import (
+    create_engine,
+    String,
+    DateTime,
+    Float,
+    select,
+    inspect,
+    text,
+)
 
 DATABASE_URL = "sqlite:///./civiclens.db"
 
@@ -30,6 +38,8 @@ class Report(Base):
     report_code: Mapped[str] = mapped_column(String(30), unique=True, index=True)
     issue: Mapped[str] = mapped_column(String(100))
     location: Mapped[str] = mapped_column(String(200))
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     priority: Mapped[str] = mapped_column(String(10), default="Medium")
     status: Mapped[str] = mapped_column(String(30), default="Reported")
     created_at: Mapped[datetime] = mapped_column(
@@ -42,6 +52,8 @@ class ReportCreate(BaseModel):
     issue: str = Field(min_length=3, max_length=100)
     location: str = Field(min_length=2, max_length=200)
     priority: Literal["Low", "Medium", "High"] = "Medium"
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 def get_db():
@@ -52,6 +64,22 @@ def get_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+
+    columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("reports")
+    }
+
+    with engine.begin() as connection:
+        if "latitude" not in columns:
+            connection.execute(
+                text("ALTER TABLE reports ADD COLUMN latitude FLOAT")
+            )
+
+        if "longitude" not in columns:
+            connection.execute(
+                text("ALTER TABLE reports ADD COLUMN longitude FLOAT")
+            )
 
     # Insert a sample report only when the database is empty.
     with SessionLocal() as db:
@@ -96,6 +124,8 @@ def report_to_dict(report: Report):
         "id": report.report_code,
         "issue": report.issue,
         "location": report.location,
+        "latitude": report.latitude,
+        "longitude": report.longitude,
         "priority": report.priority,
         "status": report.status,
         "created_at": (
@@ -140,6 +170,8 @@ def create_report(
         report_code="TEMP",
         issue=report.issue,
         location=report.location,
+        latitude=report.latitude,
+        longitude=report.longitude,
         priority=report.priority,
         status="Reported",
     )

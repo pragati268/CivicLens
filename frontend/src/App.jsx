@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import "./App.css";
 import { getReports, createReport } from "./api";
+import HazardMap from "./components/HazarMap.jsx";
+import "./App.css";
 
 function App() {
   const [reports, setReports] = useState([]);
@@ -8,7 +9,10 @@ function App() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [coordinates, setCoordinates] = useState(null);
+  const [gpsMessage, setGpsMessage] = useState("");
 
+  // Load reports from the backend
   async function loadReports() {
     setLoading(true);
     setError("");
@@ -23,6 +27,7 @@ function App() {
     }
   }
 
+  // Load reports when the page opens
   useEffect(() => {
     async function fetchReports() {
       setLoading(true);
@@ -41,6 +46,43 @@ function App() {
     fetchReports();
   }, []);
 
+  // Capture the user's GPS coordinates
+  function captureLocation() {
+    if (!navigator.geolocation) {
+      setGpsMessage("Geolocation is not supported by this browser.");
+      return;
+    }
+
+    setGpsMessage("Getting your location...");
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const location = {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        };
+
+        setCoordinates(location);
+        setGpsMessage(
+          `Location captured: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
+        );
+      },
+      (err) => {
+        setGpsMessage(
+          err.code === 1
+            ? "Location permission denied. You can submit without GPS."
+            : "Could not get location. Please try again.",
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      },
+    );
+  }
+
+  // Submit a new civic report
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -51,6 +93,8 @@ function App() {
       issue: formData.get("issue"),
       location: formData.get("location"),
       priority: formData.get("priority"),
+      latitude: coordinates?.latitude ?? null,
+      longitude: coordinates?.longitude ?? null,
     };
 
     setSubmitting(true);
@@ -58,11 +102,14 @@ function App() {
     setMessage("");
 
     try {
-      const createdReport = await createReport(report);
+      const created = await createReport(report);
 
-      setReports((current) => [createdReport, ...current]);
-      setMessage(`Report ${createdReport.id} submitted successfully.`);
+      setReports((current) => [created, ...current]);
+      setMessage(`Report ${created.id} submitted successfully.`);
+
       form.reset();
+      setCoordinates(null);
+      setGpsMessage("");
     } catch (err) {
       setError(err.message || "Unable to submit report.");
     } finally {
@@ -73,38 +120,41 @@ function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="logo">C</div>
-        <h2>CivicLens</h2>
-        <p className="tagline">SMART CIVIC SAFETY</p>
+        <div className="brand">
+          <div className="logo">C</div>
+          <div>
+            <h2>CivicLens</h2>
+            <p className="tagline">SMART CIVIC SAFETY</p>
+          </div>
+        </div>
 
         <nav>
           <a className="active" href="#overview">
             ⌂ Overview
           </a>
+          <a href="#hazard-map">⌖ Hazard Map</a>
           <a href="#reports">▤ Civic Reports</a>
           <a href="#new-report">+ Report Issue</a>
         </nav>
 
         <div className="system-status">
-          <span className="dot" />
-          Backend connected
+          <span className="dot" /> API connection enabled
         </div>
       </aside>
 
       <main className="main">
         <header className="topbar">
           <span>CivicLens / Dashboard</span>
-          <div className="user">
-            U <span>Demo User</span>
-          </div>
+          <span className="user">Citizen workspace</span>
         </header>
 
         <section className="welcome" id="overview">
           <div>
             <p className="eyebrow">CIVIC SAFETY DASHBOARD</p>
             <h1>Your city, made safer.</h1>
-            <p>Report road hazards and help build safer streets.</p>
+            <p>Detect road hazards. Report issues. Help build safer streets.</p>
           </div>
+
           <button
             onClick={() =>
               document.getElementById("new-report")?.scrollIntoView({
@@ -120,18 +170,21 @@ function App() {
           <article className="card">
             <span>Total reports</span>
             <h2>{reports.length}</h2>
-            <small>From the backend API</small>
+            <small>From backend API</small>
           </article>
+
           <article className="card">
             <span>High priority</span>
             <h2>{reports.filter((r) => r.priority === "High").length}</h2>
             <small>Needs attention</small>
           </article>
+
           <article className="card">
             <span>In progress</span>
             <h2>{reports.filter((r) => r.status === "In progress").length}</h2>
             <small>Being addressed</small>
           </article>
+
           <article className="card">
             <span>Resolved</span>
             <h2>{reports.filter((r) => r.status === "Resolved").length}</h2>
@@ -139,15 +192,24 @@ function App() {
           </article>
         </section>
 
+        <div id="hazard-map">
+          <HazardMap reports={reports} />
+        </div>
+
         <section className="content">
           <article className="panel" id="reports">
             <div className="panel-heading">
               <div>
                 <h3>Road hazard reports</h3>
-                <p>Reports retrieved from FastAPI</p>
+                <p>Reports loaded from FastAPI</p>
               </div>
-              <button className="secondary" type="button" onClick={loadReports}>
-                Refresh
+
+              <button
+                className="secondary"
+                onClick={loadReports}
+                disabled={loading}
+              >
+                {loading ? "Loading..." : "Refresh"}
               </button>
             </div>
 
@@ -156,7 +218,7 @@ function App() {
             {message && <p className="success-message">{message}</p>}
 
             {!loading && !error && reports.length === 0 && (
-              <p>No reports found. Submit the first report below.</p>
+              <p>No reports yet. Create the first report below.</p>
             )}
 
             {!loading &&
@@ -168,9 +230,11 @@ function App() {
                       {report.id} · {report.status}
                     </small>
                   </div>
+
                   <span>{report.location}</span>
-                  <b className={report.priority.toLowerCase()}>
-                    {report.priority}
+
+                  <b className={(report.priority || "Medium").toLowerCase()}>
+                    {report.priority || "Medium"}
                   </b>
                 </div>
               ))}
@@ -178,7 +242,7 @@ function App() {
 
           <article className="panel" id="new-report">
             <h3>Report a road issue</h3>
-            <p>Submit your report to the CivicLens backend.</p>
+            <p>Submit a report with optional GPS coordinates.</p>
 
             <form className="report-form" onSubmit={handleSubmit}>
               <label>
@@ -196,15 +260,25 @@ function App() {
               </label>
 
               <label>
-                Location
+                Location or landmark
                 <input
                   name="location"
-                  placeholder="Enter a road or landmark"
+                  placeholder="Enter road or landmark"
                   minLength={2}
                   maxLength={200}
                   required
                 />
               </label>
+
+              <button
+                type="button"
+                className="secondary"
+                onClick={captureLocation}
+              >
+                Use my current location
+              </button>
+
+              {gpsMessage && <p className="gps-message">{gpsMessage}</p>}
 
               <label>
                 Priority
@@ -222,7 +296,7 @@ function App() {
           </article>
         </section>
 
-        <footer>CivicLens © 2026 · Full-stack development prototype</footer>
+        <footer>CivicLens © 2026 · Road safety prototype</footer>
       </main>
     </div>
   );
