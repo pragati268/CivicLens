@@ -24,3 +24,45 @@ export async function createReport(report) {
 
   return response.json();
 }
+
+export async function uploadImage(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(
+    "http://127.0.0.1:8000/api/upload-image",
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Image upload failed.");
+  }
+
+  return data;
+}
+
+export async function detectPothole(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(
+    "http://127.0.0.1:8000/api/detect-pothole",
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Pothole detection failed.");
+  }
+
+  return data;
+}
