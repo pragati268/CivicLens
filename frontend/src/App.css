@@ -1703,3 +1703,35 @@ tbody tr:hover {
     width: 100px;
   }
 }
+
+
+/* CivicLens map markers */
+.civiclens-red-cross-wrapper {
+  background: transparent;
+  border: none;
+}
+
+.civiclens-red-cross {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: #dc2626;
+  font-size: 27px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow:
+    0 0 2px #fff,
+    0 0 5px #fff;
+  cursor: pointer;
+}
+
+.civiclens-popup {
+  min-width: 160px;
+  line-height: 1.5;
+}
+
+.civiclens-popup p {
+  margin: 5px 0;
+}
